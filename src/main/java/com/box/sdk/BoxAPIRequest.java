@@ -8,14 +8,20 @@ import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.ProtocolException;
 import java.net.URL;
+import java.security.KeyManagementException;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
+import javax.net.ssl.SSLParameters;
 
 import com.box.sdk.http.HttpHeaders;
 import com.box.sdk.http.HttpMethod;
+
 
 /**
  * Used to make HTTP requests to the Box API.
@@ -52,6 +58,7 @@ public class BoxAPIRequest {
     private int numRedirects;
     private boolean followRedirects = true;
     private boolean shouldAuthenticate;
+    private SSLContext sslContext;
 
     /**
      * Constructs an unauthenticated BoxAPIRequest.
@@ -73,6 +80,15 @@ public class BoxAPIRequest {
         this.url = url;
         this.method = method;
         this.headers = new ArrayList<RequestHeader>();
+        if (api != null) {
+            Map<String, String> customHeaders = api.getHeaders();
+            if (customHeaders != null) {
+                for (String header : customHeaders.keySet()) {
+                    this.addHeader(header, customHeaders.get(header));
+                }
+            }
+            this.headers.add(new RequestHeader("X-Box-UA", api.getBoxUAHeader()));
+        }
         this.backoffCounter = new BackoffCounter(new Time());
         this.shouldAuthenticate = true;
         this.connectTimeout = BoxGlobalSettings.getConnectTimeout();
@@ -80,6 +96,47 @@ public class BoxAPIRequest {
 
         this.addHeader("Accept-Encoding", "gzip");
         this.addHeader("Accept-Charset", "utf-8");
+
+        // Setup the SSL context manually to force newer TLS version on legacy Java environments
+        // This is necessary because Java 7 uses TLSv1.0 by default, but the Box API will need
+        // to deprecate this protocol in the future.  To prevent clients from breaking, we must
+        // ensure that they are using TLSv1.1 or greater!
+        SSLContext sc = null;
+        try {
+            sc = SSLContext.getDefault();
+            SSLParameters params = sc.getDefaultSSLParameters();
+            boolean supportsNewTLS = false;
+            for (String protocol : params.getProtocols()) {
+                if (protocol.compareTo("TLSv1") > 0) {
+                    supportsNewTLS = true;
+                    break;
+                }
+            }
+            if (!supportsNewTLS) {
+                // Try to upgrade to a higher TLS version
+                sc = null;
+                sc = SSLContext.getInstance("TLSv1.1");
+                sc.init(null, null, new java.security.SecureRandom());
+                sc = SSLContext.getInstance("TLSv1.2");
+                sc.init(null, null, new java.security.SecureRandom());
+            }
+        } catch (NoSuchAlgorithmException ex) {
+            if (sc == null) {
+                LOGGER.warning("Unable to set up SSL context for HTTPS!  This may result in the inability "
+                        + " to connect to the Box API.");
+            }
+            if (sc != null && sc.getProtocol().equals("TLSv1")) {
+                // Could not find a good version of TLS
+                LOGGER.warning("Using deprecated TLSv1 protocol, which will be deprecated by the Box API!  Upgrade "
+                        + "to a newer version of Java as soon as possible.");
+            }
+        } catch (KeyManagementException ex) {
+
+            LOGGER.warning("Exception when initializing SSL Context!  This may result in the inabilty to connect to "
+                    + "the Box API");
+            sc = null;
+        }
+        this.sslContext = sc;
     }
 
     /**
@@ -107,11 +164,15 @@ public class BoxAPIRequest {
      * @param value the header value.
      */
     public void addHeader(String key, String value) {
-        if ("As-User".equals(key)) {
-            int index = this.headers.indexOf("As-User");
-            if (index > -1) {
-                this.headers.remove(index);
+        if (key.equals("As-User")) {
+            for (int i = 0; i < this.headers.size(); i++) {
+                if (this.headers.get(i).getKey().equals("As-User")) {
+                    this.headers.remove(i);
+                }
             }
+        }
+        if (key.equals("X-Box-UA")) {
+            throw new IllegalArgumentException("Altering the X-Box-UA header is not permitted");
         }
         this.headers.add(new RequestHeader(key, value));
     }
@@ -301,27 +362,30 @@ public class BoxAPIRequest {
         builder.append(this.url.toString());
         builder.append(lineSeparator);
 
-        for (Map.Entry<String, List<String>> entry : this.requestProperties.entrySet()) {
-            List<String> nonEmptyValues = new ArrayList<String>();
-            for (String value : entry.getValue()) {
-                if (value != null && value.trim().length() != 0) {
-                    nonEmptyValues.add(value);
+        if (this.requestProperties != null) {
+
+            for (Map.Entry<String, List<String>> entry : this.requestProperties.entrySet()) {
+                List<String> nonEmptyValues = new ArrayList<String>();
+                for (String value : entry.getValue()) {
+                    if (value != null && value.trim().length() != 0) {
+                        nonEmptyValues.add(value);
+                    }
                 }
-            }
 
-            if (nonEmptyValues.size() == 0) {
-                continue;
-            }
+                if (nonEmptyValues.size() == 0) {
+                    continue;
+                }
 
-            builder.append(entry.getKey());
-            builder.append(": ");
-            for (String value : nonEmptyValues) {
-                builder.append(value);
-                builder.append(", ");
-            }
+                builder.append(entry.getKey());
+                builder.append(": ");
+                for (String value : nonEmptyValues) {
+                    builder.append(value);
+                    builder.append(", ");
+                }
 
-            builder.delete(builder.length() - 2, builder.length());
-            builder.append(lineSeparator);
+                builder.delete(builder.length() - 2, builder.length());
+                builder.append(lineSeparator);
+            }
         }
 
         String bodyString = this.bodyToString();
@@ -407,6 +471,14 @@ public class BoxAPIRequest {
         }
 
         HttpURLConnection connection = this.createConnection();
+
+        if (connection instanceof HttpsURLConnection) {
+            HttpsURLConnection httpsConnection = (HttpsURLConnection) connection;
+
+            if (this.sslContext != null) {
+                httpsConnection.setSSLSocketFactory(this.sslContext.getSocketFactory());
+            }
+        }
 
         if (this.bodyLength > 0) {
             connection.setFixedLengthStreamingMode((int) this.bodyLength);

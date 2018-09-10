@@ -9,10 +9,9 @@ The Box Java SDK for interacting with the
 Quickstart
 ----------
 
-The SDK can be obtained by adding it as a [maven dependency]
-(http://opensource.box.com/box-java-sdk/), cloning the source into your project,
-or by downloading one of the precompiled JARs from the [releases page on GitHub]
-(https://github.com/box/box-java-sdk/releases).
+The SDK can be obtained by adding it as a [maven dependency](http://opensource.box.com/box-java-sdk/),
+cloning the source into your project, or by downloading one of the precompiled JARs from the
+[releases page on GitHub](https://github.com/box/box-java-sdk/releases).
 
 **IF YOU USE THE JAR, you'll also need to include several dependencies:**
 
@@ -30,11 +29,11 @@ or by downloading one of the precompiled JARs from the [releases page on GitHub]
    [Java Cryptography Extension for IBM JDK](https://www14.software.ibm.com/webapp/iwm/web/preLogin.do?source=jcesdk)
 
 An app has to be authorized by the admin of the enterprise before these tests. It's always good to begin with the
-[Getting Started Section](https://developer.box.com/v2.0/docs/getting-started-box-platform) at Box's developer website
+[Getting Started Section](https://developer.box.com/docs/setting-up-a-jwt-app) at Box's developer website
 
 ## Quick Test
 
-**Following things work only if the app has been configured and authorized as mentioned [here](https://developer.box.com/v2.0/docs/configuring-box-platform)**
+**Following things work only if the app has been configured and authorized as mentioned [here](https://developer.box.com/docs/setting-up-a-jwt-app)**
 
 Here is a simple example of how to authenticate with the API using a developer
 token and then print the ID and name of each item in your root folder.
@@ -47,9 +46,8 @@ for (BoxItem.Info itemInfo : rootFolder) {
 }
 ```
 
-For more details on how to get started, check out the [overview
-guide](doc/overview.md). It has a short explanation of how the SDK works and how
-you can get started using it.
+For more details on how to get started, check out the [overview guide](doc/overview.md).
+It has a short explanation of how the SDK works and how you can get started using it.
 
 ### Sample Projects
 
@@ -61,8 +59,7 @@ This project will output your name and a list of the files and folders in your r
 
 To run the project, first provide a developer token in
 `src/example/java/com/box/sdk/example/Main.java`. You can obtain a developer
-token from your application's [developer
-console](https://app.box.com/developers/services).
+token from your application's [developer console](https://app.box.com/developers/services).
 
 ```java
 public final class Main {
@@ -78,8 +75,8 @@ Then just invoke `gradle runExample` to run the Main example!
 
 Below projects need app configurations stored in JSON format in `config.json` file at location `src/example/config/`.
 
-This configuration file can be downloaded from your application's `Configuration` tab at [developer 
-console](https://app.box.com/developers/console)
+This configuration file can be downloaded from your application's `Configuration` tab in the
+[developer console](https://app.box.com/developers/console)
 
 #### CreateAppUser
 
@@ -149,6 +146,11 @@ public final class BoxDeveloperEditionAPIConnectionAsEnterpriseUser {
     api = new BoxDeveloperEditionAPIConnection(USER_ID, DeveloperEditionEntityType.USER, boxConfig,
         accessTokenCache);
 ```
+
+Compatibility
+-------------
+
+The Box Java SDK is compatible with Java 7 and up.
 
 Building
 --------
